@@ -1,0 +1,16 @@
+const KEY="moneysync.transactions.v1";const $=id=>document.getElementById(id);const money=n=>new Intl.NumberFormat("th-TH",{style:"currency",currency:"THB"}).format(Number(n)||0);const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800)}
+function decodeShare(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const bin=atob(s);const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));return JSON.parse(new TextDecoder().decode(bytes))}
+function txHtml(r){return `<div class="transaction"><div class="tx-icon">${r.type==="income"?"🟢":"🔴"}</div><div><div class="tx-title">${esc(r.title)}</div><div class="tx-meta">${esc(r.category)} • ${esc(r.date)}${r.note?` • ${esc(r.note)}`:""}</div></div><div class="tx-amount ${r.type}">${r.type==="income"?"+":"−"}${money(r.amount)}</div></div>`}
+function draw(inc,exp){const c=$("chart"),ctx=c.getContext("2d"),dpr=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);const max=Math.max(inc,exp,1),base=h-35,bw=Math.min(100,w/4),gap=40;[[inc,"รายรับ","#16824b"],[exp,"รายจ่าย","#c0392b"]].forEach((x,i)=>{const bh=x[0]/max*(h-75),xp=w/2-bw-gap/2+i*(bw+gap);ctx.fillStyle=x[2];ctx.fillRect(xp,base-bh,bw,bh);ctx.fillStyle="#718096";ctx.textAlign="center";ctx.font="13px sans-serif";ctx.fillText(x[1],xp+bw/2,h-12);ctx.fillStyle="#172033";ctx.font="bold 13px sans-serif";ctx.fillText(money(x[0]),xp+bw/2,Math.max(18,base-bh-8))})}
+let payload=null;try{payload=decodeShare(location.hash.slice(1))}catch{}
+if(!payload||payload.v!==1||!Array.isArray(payload.transactions)){$("invalid").classList.remove("hidden")}else{
+ $("content").classList.remove("hidden");$("period").textContent=payload.range==="month"?"Snapshot: เดือนที่สร้างลิงก์":"Snapshot: ข้อมูลทั้งหมด";
+ const rows=payload.transactions,inc=rows.filter(r=>r.type==="income").reduce((a,r)=>a+Number(r.amount),0),exp=rows.filter(r=>r.type==="expense").reduce((a,r)=>a+Number(r.amount),0);
+ $("balance").textContent=money(inc-exp);$("income").textContent=money(inc);$("expense").textContent=money(exp);
+ $("transactions").innerHTML=rows.sort((a,b)=>b.date.localeCompare(a.date)).map(txHtml).join("")||`<p class="muted">ไม่มีรายการ</p>`;
+ const cats={};rows.filter(r=>r.type==="expense").forEach(r=>cats[r.category]=(cats[r.category]||0)+Number(r.amount));
+ $("categories").innerHTML=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="category-row"><span>${esc(k)}</span><strong>${money(v)}</strong></div>`).join("")||`<p class="muted">ไม่มีรายจ่าย</p>`;
+ draw(inc,exp);
+ $("importBtn").addEventListener("click",()=>{try{const old=JSON.parse(localStorage.getItem(KEY)||"[]");localStorage.setItem(KEY,JSON.stringify(old.concat(rows.map(r=>({...r,id:crypto.randomUUID(),createdAt:Date.now()})))));toast("นำข้อมูลเข้าเครื่องแล้ว ✓")}catch{toast("นำเข้าไม่สำเร็จ")}});
+}
